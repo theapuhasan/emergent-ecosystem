@@ -7,7 +7,8 @@ import matplotlib.animation as animation
 from matplotlib.patches import Circle
 import numpy as np
 from dataclasses import replace
-import io
+import tempfile
+import os
 
 # Import simulation components
 from config import DEFAULT_CONFIG, EXPERIMENT_PRESETS, SimulationConfig
@@ -144,8 +145,9 @@ if run_simulation:
             with col1:
                 st.subheader("🎮 World Visualization")
                 
-                # Create animation
+                # Create animation with matplotlib
                 fig, ax = plt.subplots(figsize=(10, 7.5), dpi=80)
+                fig.patch.set_facecolor('#131717')
                 
                 def animate_frame(frame_idx):
                     ax.clear()
@@ -194,13 +196,17 @@ if run_simulation:
                 anim = animation.FuncAnimation(fig, animate_frame, frames=len(frames), 
                                              interval=50, repeat=True, blit=False)
                 
-                # Save animation to buffer
-                buf = io.BytesIO()
-                anim.save(buf, writer='pillow', fps=20, dpi=80)
-                buf.seek(0)
+                # Save animation to temporary file
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    anim_path = os.path.join(tmpdir, "animation.gif")
+                    anim.save(anim_path, writer='pillow', fps=20, dpi=80)
+                    
+                    # Read and display
+                    with open(anim_path, 'rb') as f:
+                        st.image(f.read(), use_container_width=True)
                 
-                st.image(buf, use_container_width=True)
-                st.caption(f"Animation ({len(frames)} frames)")
+                plt.close(fig)
+                st.caption(f"Animation ({len(frames)} frames @ 20 fps)")
             
             with col2:
                 st.subheader("📊 Real-time Metrics")
