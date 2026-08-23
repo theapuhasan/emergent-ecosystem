@@ -1,11 +1,11 @@
-"""Streamlit web interface for the emergent ecosystem simulation."""
+"""Streamlit web interface for the emergent ecosystem simulation - Cloud compatible."""
 
 import streamlit as st
-import numpy as np
-from pathlib import Path
-from dataclasses import replace
 import pandas as pd
 import matplotlib.pyplot as plt
+from dataclasses import replace
+from pathlib import Path
+import sys
 
 # Import simulation components
 from config import DEFAULT_CONFIG, EXPERIMENT_PRESETS, SimulationConfig
@@ -61,7 +61,7 @@ with st.sidebar:
     initial_resources = st.slider("Resources", 10, 200, EXPERIMENT_PRESETS[scenario].initial_resources)
     
     st.subheader("Simulation Speed")
-    ticks = st.slider("Ticks to run", 100, 5000, 1000, step=100)
+    ticks = st.slider("Ticks to run", 100, 3000, 500, step=100)
     updates_per_frame = st.slider("Updates per frame", 1, 10, 2)
     
     seed_val = st.number_input("Random seed", value=42, min_value=0)
@@ -84,84 +84,91 @@ if run_simulation:
     
     # Run simulation
     with st.spinner(f"Running {ticks} ticks with {decision_mode} policy..."):
-        world = World(config)
-        world.populate_initial()
-        
-        # Storage for metrics
-        metrics_history = {
-            "tick": [],
-            "prey_count": [],
-            "predator_count": [],
-            "resource_count": [],
-            "avg_prey_energy": [],
-            "avg_predator_energy": [],
-        }
-        
-        # Run ticks
-        progress_bar = st.progress(0)
-        for tick in range(ticks):
-            world.update(config.dt)
+        try:
+            world = World(config)
+            world.populate_initial()
             
-            # Collect metrics every 10 ticks
-            if tick % 10 == 0 or tick == ticks - 1:
-                metrics = world.metrics.get_latest_stats()
-                metrics_history["tick"].append(tick)
-                metrics_history["prey_count"].append(metrics.get("prey_count", 0))
-                metrics_history["predator_count"].append(metrics.get("predator_count", 0))
-                metrics_history["resource_count"].append(metrics.get("resource_count", 0))
-                metrics_history["avg_prey_energy"].append(metrics.get("avg_prey_energy", 0))
-                metrics_history["avg_predator_energy"].append(metrics.get("avg_predator_energy", 0))
+            # Storage for metrics
+            metrics_history = {
+                "tick": [],
+                "prey_count": [],
+                "predator_count": [],
+                "resource_count": [],
+                "avg_prey_energy": [],
+                "avg_predator_energy": [],
+            }
             
-            progress_bar.progress((tick + 1) / ticks)
-    
-    # Display results
-    st.success(f"✅ Simulation complete!")
-    
-    # Metrics overview (3 columns)
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Final Prey", metrics_history["prey_count"][-1])
-    with col2:
-        st.metric("Final Predators", metrics_history["predator_count"][-1])
-    with col3:
-        st.metric("Final Resources", metrics_history["resource_count"][-1])
-    
-    # Plots
-    st.subheader("📊 Population Over Time")
-    
-    df = pd.DataFrame(metrics_history)
-    
-    # Population chart
-    fig, ax = plt.subplots(figsize=(12, 5))
-    ax.plot(df["tick"], df["prey_count"], label="Prey", color="#46A5FF", linewidth=2)
-    ax.plot(df["tick"], df["predator_count"], label="Predators", color="#EB534C", linewidth=2)
-    ax.plot(df["tick"], df["resource_count"], label="Resources", color="#58D26A", linewidth=2)
-    ax.set_xlabel("Tick")
-    ax.set_ylabel("Count")
-    ax.set_title(f"Population Dynamics - {scenario.replace('_', ' ').title()} ({decision_mode})")
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    st.pyplot(fig)
-    
-    # Energy chart
-    fig, ax = plt.subplots(figsize=(12, 5))
-    ax.plot(df["tick"], df["avg_prey_energy"], label="Avg Prey Energy", color="#46A5FF", linewidth=2)
-    ax.plot(df["tick"], df["avg_predator_energy"], label="Avg Predator Energy", color="#EB534C", linewidth=2)
-    ax.set_xlabel("Tick")
-    ax.set_ylabel("Energy")
-    ax.set_title("Average Agent Energy Over Time")
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    st.pyplot(fig)
-    
-    # Download CSV
-    csv = df.to_csv(index=False)
-    st.download_button(
-        label="📥 Download metrics as CSV",
-        data=csv,
-        file_name=f"emergent_ecosystem_{scenario}_{decision_mode}.csv",
-        mime="text/csv"
-    )
+            # Run ticks
+            progress_bar = st.progress(0)
+            for tick in range(ticks):
+                world.update(config.dt)
+                
+                # Collect metrics every 10 ticks
+                if tick % max(1, ticks // 50) == 0 or tick == ticks - 1:
+                    metrics = world.metrics.get_latest_stats()
+                    metrics_history["tick"].append(tick)
+                    metrics_history["prey_count"].append(metrics.get("prey_count", 0))
+                    metrics_history["predator_count"].append(metrics.get("predator_count", 0))
+                    metrics_history["resource_count"].append(metrics.get("resource_count", 0))
+                    metrics_history["avg_prey_energy"].append(metrics.get("avg_prey_energy", 0))
+                    metrics_history["avg_predator_energy"].append(metrics.get("avg_predator_energy", 0))
+                
+                progress_bar.progress(min((tick + 1) / ticks, 1.0))
+            
+            # Display results
+            st.success(f"✅ Simulation complete!")
+            
+            # Metrics overview (3 columns)
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Final Prey", int(metrics_history["prey_count"][-1]))
+            with col2:
+                st.metric("Final Predators", int(metrics_history["predator_count"][-1]))
+            with col3:
+                st.metric("Final Resources", int(metrics_history["resource_count"][-1]))
+            
+            # Plots
+            st.subheader("📊 Population Over Time")
+            
+            df = pd.DataFrame(metrics_history)
+            
+            # Population chart
+            fig, ax = plt.subplots(figsize=(12, 5))
+            ax.plot(df["tick"], df["prey_count"], label="Prey", color="#46A5FF", linewidth=2)
+            ax.plot(df["tick"], df["predator_count"], label="Predators", color="#EB534C", linewidth=2)
+            ax.plot(df["tick"], df["resource_count"], label="Resources", color="#58D26A", linewidth=2)
+            ax.set_xlabel("Tick")
+            ax.set_ylabel("Count")
+            ax.set_title(f"Population Dynamics - {scenario.replace('_', ' ').title()} ({decision_mode})")
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            plt.tight_layout()
+            st.pyplot(fig)
+            
+            # Energy chart
+            fig, ax = plt.subplots(figsize=(12, 5))
+            ax.plot(df["tick"], df["avg_prey_energy"], label="Avg Prey Energy", color="#46A5FF", linewidth=2)
+            ax.plot(df["tick"], df["avg_predator_energy"], label="Avg Predator Energy", color="#EB534C", linewidth=2)
+            ax.set_xlabel("Tick")
+            ax.set_ylabel("Energy")
+            ax.set_title("Average Agent Energy Over Time")
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            plt.tight_layout()
+            st.pyplot(fig)
+            
+            # Download CSV
+            csv = df.to_csv(index=False)
+            st.download_button(
+                label="📥 Download metrics as CSV",
+                data=csv,
+                file_name=f"emergent_ecosystem_{scenario}_{decision_mode}.csv",
+                mime="text/csv"
+            )
+            
+        except Exception as e:
+            st.error(f"❌ Simulation error: {str(e)}")
+            st.info("Try running locally for better debugging: `streamlit run streamlit_app.py`")
 
 else:
     # Welcome screen
@@ -186,9 +193,9 @@ else:
     with col2:
         st.subheader("📚 Resources")
         st.markdown("""
-        - [GitHub Repository](https://github.com/theapuhasan/emergent-ecosystem)
-        - [Run Tests](https://github.com/theapuhasan/emergent-ecosystem#running-tests)
+        - [GitHub Repo](https://github.com/theapuhasan/emergent-ecosystem)
         - [Local Setup](https://github.com/theapuhasan/emergent-ecosystem#installation)
+        - [Run Tests](https://github.com/theapuhasan/emergent-ecosystem#running-tests)
         """)
     
     st.info("""
