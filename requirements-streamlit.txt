@@ -1,0 +1,5 @@
+# Streamlit Cloud compatible requirements (no pygame or display libs)
+streamlit>=1.28.0
+pandas>=2.0.0
+matplotlib>=3.8.0
+numpy>=1.24.0
