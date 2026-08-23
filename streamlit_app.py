@@ -4,13 +4,12 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 from dataclasses import replace
-from pathlib import Path
 import sys
 
 # Import simulation components
 from config import DEFAULT_CONFIG, EXPERIMENT_PRESETS, SimulationConfig
 from src.simulation.world import World
-from src.simulation.decision import create_decision_system
+from src.simulation.species import PREY, PREDATOR
 
 # Set Streamlit page config
 st.set_page_config(
@@ -94,8 +93,8 @@ if run_simulation:
                 "prey_count": [],
                 "predator_count": [],
                 "resource_count": [],
-                "avg_prey_energy": [],
-                "avg_predator_energy": [],
+                "avg_prey_speed": [],
+                "avg_predator_speed": [],
             }
             
             # Run ticks
@@ -103,15 +102,17 @@ if run_simulation:
             for tick in range(ticks):
                 world.update(config.dt)
                 
-                # Collect metrics every 10 ticks
-                if tick % max(1, ticks // 50) == 0 or tick == ticks - 1:
-                    metrics = world.metrics.get_latest_stats()
-                    metrics_history["tick"].append(tick)
-                    metrics_history["prey_count"].append(metrics.get("prey_count", 0))
-                    metrics_history["predator_count"].append(metrics.get("predator_count", 0))
-                    metrics_history["resource_count"].append(metrics.get("resource_count", 0))
-                    metrics_history["avg_prey_energy"].append(metrics.get("avg_prey_energy", 0))
-                    metrics_history["avg_predator_energy"].append(metrics.get("avg_predator_energy", 0))
+                # Collect metrics every 10 ticks (or more frequently for short runs)
+                collection_interval = max(1, ticks // 50)
+                if tick % collection_interval == 0 or tick == ticks - 1:
+                    latest = world.metrics.latest_record()
+                    if latest:
+                        metrics_history["tick"].append(latest["tick"])
+                        metrics_history["prey_count"].append(latest["prey_population"])
+                        metrics_history["predator_count"].append(latest["predator_population"])
+                        metrics_history["resource_count"].append(latest["resource_count"])
+                        metrics_history["avg_prey_speed"].append(latest["avg_prey_speed"])
+                        metrics_history["avg_predator_speed"].append(latest["avg_predator_speed"])
                 
                 progress_bar.progress(min((tick + 1) / ticks, 1.0))
             
@@ -121,53 +122,58 @@ if run_simulation:
             # Metrics overview (3 columns)
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("Final Prey", int(metrics_history["prey_count"][-1]))
+                st.metric("Final Prey", int(metrics_history["prey_count"][-1]) if metrics_history["prey_count"] else 0)
             with col2:
-                st.metric("Final Predators", int(metrics_history["predator_count"][-1]))
+                st.metric("Final Predators", int(metrics_history["predator_count"][-1]) if metrics_history["predator_count"] else 0)
             with col3:
-                st.metric("Final Resources", int(metrics_history["resource_count"][-1]))
+                st.metric("Final Resources", int(metrics_history["resource_count"][-1]) if metrics_history["resource_count"] else 0)
             
             # Plots
-            st.subheader("📊 Population Over Time")
-            
-            df = pd.DataFrame(metrics_history)
-            
-            # Population chart
-            fig, ax = plt.subplots(figsize=(12, 5))
-            ax.plot(df["tick"], df["prey_count"], label="Prey", color="#46A5FF", linewidth=2)
-            ax.plot(df["tick"], df["predator_count"], label="Predators", color="#EB534C", linewidth=2)
-            ax.plot(df["tick"], df["resource_count"], label="Resources", color="#58D26A", linewidth=2)
-            ax.set_xlabel("Tick")
-            ax.set_ylabel("Count")
-            ax.set_title(f"Population Dynamics - {scenario.replace('_', ' ').title()} ({decision_mode})")
-            ax.legend()
-            ax.grid(True, alpha=0.3)
-            plt.tight_layout()
-            st.pyplot(fig)
-            
-            # Energy chart
-            fig, ax = plt.subplots(figsize=(12, 5))
-            ax.plot(df["tick"], df["avg_prey_energy"], label="Avg Prey Energy", color="#46A5FF", linewidth=2)
-            ax.plot(df["tick"], df["avg_predator_energy"], label="Avg Predator Energy", color="#EB534C", linewidth=2)
-            ax.set_xlabel("Tick")
-            ax.set_ylabel("Energy")
-            ax.set_title("Average Agent Energy Over Time")
-            ax.legend()
-            ax.grid(True, alpha=0.3)
-            plt.tight_layout()
-            st.pyplot(fig)
-            
-            # Download CSV
-            csv = df.to_csv(index=False)
-            st.download_button(
-                label="📥 Download metrics as CSV",
-                data=csv,
-                file_name=f"emergent_ecosystem_{scenario}_{decision_mode}.csv",
-                mime="text/csv"
-            )
+            if metrics_history["tick"]:
+                st.subheader("📊 Population Over Time")
+                
+                df = pd.DataFrame(metrics_history)
+                
+                # Population chart
+                fig, ax = plt.subplots(figsize=(12, 5))
+                ax.plot(df["tick"], df["prey_count"], label="Prey", color="#46A5FF", linewidth=2)
+                ax.plot(df["tick"], df["predator_count"], label="Predators", color="#EB534C", linewidth=2)
+                ax.plot(df["tick"], df["resource_count"], label="Resources", color="#58D26A", linewidth=2)
+                ax.set_xlabel("Tick")
+                ax.set_ylabel("Count")
+                ax.set_title(f"Population Dynamics - {scenario.replace('_', ' ').title()} ({decision_mode})")
+                ax.legend()
+                ax.grid(True, alpha=0.3)
+                plt.tight_layout()
+                st.pyplot(fig)
+                
+                # Speed chart
+                fig, ax = plt.subplots(figsize=(12, 5))
+                ax.plot(df["tick"], df["avg_prey_speed"], label="Avg Prey Speed", color="#46A5FF", linewidth=2)
+                ax.plot(df["tick"], df["avg_predator_speed"], label="Avg Predator Speed", color="#EB534C", linewidth=2)
+                ax.set_xlabel("Tick")
+                ax.set_ylabel("Speed")
+                ax.set_title("Average Agent Speed Over Time")
+                ax.legend()
+                ax.grid(True, alpha=0.3)
+                plt.tight_layout()
+                st.pyplot(fig)
+                
+                # Download CSV
+                csv = df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download metrics as CSV",
+                    data=csv,
+                    file_name=f"emergent_ecosystem_{scenario}_{decision_mode}.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.warning("No metrics recorded. Simulation may have ended early.")
             
         except Exception as e:
             st.error(f"❌ Simulation error: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
             st.info("Try running locally for better debugging: `streamlit run streamlit_app.py`")
 
 else:
