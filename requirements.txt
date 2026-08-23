@@ -1,5 +1,8 @@
 # Python 3.11+ required (uses match-free StrEnum, slots dataclasses, PEP 604 unions)
+# For local desktop play with Pygame rendering:
 pygame>=2.5.0
+
+# For analysis and web interface:
 matplotlib>=3.8.0
 pytest>=8.0.0
 streamlit>=1.28.0
